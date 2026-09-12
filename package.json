@@ -5,7 +5,9 @@
   "description": "An open laboratory for an ant-inspired body, a synthetic neural controller, and controlled interventions.",
   "type": "module",
   "license": "MIT",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "start": "node scripts/serve.mjs",
     "test": "node --test tests/*.test.mjs",
@@ -14,6 +16,7 @@
     "market": "node scripts/run-market.mjs",
     "replay": "node scripts/replay.mjs",
     "verify": "node scripts/verify-package.mjs",
+    "verify:manifest": "node scripts/verify-manifest.mjs",
     "build": "node scripts/build-standalone.mjs",
     "figures": "node scripts/render-figures.mjs"
   }

@@ -1,4 +1,4 @@
-import { DEFAULTS, VERSION, TURNS, ACTION_NAMES } from './config.js';
+import { DEFAULTS, VERSION, TURNS, ACTION_NAMES, GRID_CELL, GRID_COLS, GRID_ROWS } from './config.js';
 import { Arena } from './arena.js';
 import { NeuralController } from './controller.js';
 import { Random } from './random.js';
@@ -39,7 +39,7 @@ export class Simulation {
       a.lastReward=reward;a.totalReward+=reward;
       const nextInputs=sense(a,this.arena,this.options,this.disabled);
       this.controller.learn(reward,nextInputs,reached);
-      this.visited.add(`${Math.min(23,Math.floor(a.x/40))},${Math.min(13,Math.floor(a.y/40))}`);
+      this.visited.add(`${Math.min(GRID_COLS-1,Math.floor(a.x/GRID_CELL))},${Math.min(GRID_ROWS-1,Math.floor(a.y/GRID_CELL))}`);
       this.trail.push({x:a.x,y:a.y,carrying:a.carrying,tick:this.tick});
       if(this.trail.length>2500)this.trail.shift();
       if(this.tick%4===0){this.activity.push([...this.controller.state]);if(this.activity.length>140)this.activity.shift();}

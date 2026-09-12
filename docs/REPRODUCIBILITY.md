@@ -8,7 +8,13 @@ npm run replay -- --file data/runs/navigation-seed17.json
 npm run replay -- --file data/runs/relocation-seed17.json
 npm run replay -- --file data/runs/antenna-seed17.json
 npm run verify
+npm run verify:manifest
 ```
+
+`npm run verify:manifest` checks `MANIFEST.sha256` against the tree. It is the
+only check that notices if a shipped file was altered or dropped after the
+checksums were recorded. Regenerate it deliberately with
+`npm run verify:manifest -- --write` when a change to tracked files is intended.
 
 The release has deterministic seeded dynamics and no network dependency. The reference records identify version 0.1.0. Replaying a run under a changed implementation may legitimately produce different results; do not hide that mismatch.
 
