@@ -1,0 +1,57 @@
+name: Reproducibility
+
+# The manifest and docs/GITHUB_UPLOAD.md both referred to this workflow before
+# it existed. It checks the claims the repository actually makes: the tests
+# pass, the package verifies, the recorded runs replay, and the shipped
+# checksums still describe the tree.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Package verification
+        run: npm run verify
+
+      - name: Manifest integrity
+        run: npm run verify:manifest
+
+      - name: Replay recorded runs
+        run: |
+          npm run replay -- --file data/runs/navigation-seed17.json
+          npm run replay -- --file data/runs/relocation-seed17.json
+          npm run replay -- --file data/runs/antenna-seed17.json
+
+  python-server:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Start-up smoke check
+        run: |
+          python start_ant1.py --port 8123 --no-browser &
+          sleep 2
+          curl -fsS http://127.0.0.1:8123/index.html > /dev/null
+          test "$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:8123/.git/config)" = 404
+          echo "server serves the console and refuses hidden paths"
