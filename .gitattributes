@@ -1,0 +1,9 @@
+* text=auto
+*.png binary
+*.gif binary
+*.ttf binary
+*.js text eol=lf
+*.mjs text eol=lf
+*.md text eol=lf
+*.html text eol=lf
+*.bat text eol=crlf

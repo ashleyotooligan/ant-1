@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+message: "If you discuss ANT-1, cite the software version and include the seed and protocol."
+title: "ANT-1: An embodied neural experiment"
+type: software
+authors:
+  - name: "ANT-1 contributors"
+version: 0.1.0
+date-released: 2026-09-12
+license: MIT
+abstract: "An independent artificial-life laboratory with a synthetic recurrent controller, a simulated ant body, reproducible interventions, and an optional paper-market adapter."

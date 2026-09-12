@@ -1,0 +1,9 @@
+node_modules/
+output/
+__pycache__/
+*.pyc
+.DS_Store
+Thumbs.db
+.env
+.env.*
+!.env.example
