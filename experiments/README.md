@@ -1,4 +1,4 @@
-# Experiment catalogue
+# Experiment catalogue.
 
 Experiments are executable specifications. `protocols.js` defines their configuration and intervention schedule; `runner.js` applies each event before the next step. The browser reads the same protocol definitions.
 
