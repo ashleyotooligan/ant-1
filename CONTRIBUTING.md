@@ -21,7 +21,10 @@ tracked in Git.
 
 | Command | Effect | Writes |
 | --- | --- | --- |
-| `npm start`, `npm test`, `npm run verify`, `npm run verify:manifest`, `npm run replay`, `npm run experiment`, `npm run market` | read-only | nothing |
+| `npm test`, `npm run verify`, `npm run verify:manifest`, `npm run replay` | read-only | nothing |
+| `npm start` | serves | nothing; runs a local server on 127.0.0.1 until you stop it |
+| `npm run experiment` | writes | `output/<protocol>-seed<n>.json` (ignored), or `--out <path>` wherever you point it |
+| `npm run market` | writes | `output/market-comparison.json` (ignored), or `--out <path>` wherever you point it |
 | `npm run benchmark` | writes | `output/benchmark.json` (ignored), or `--out <path>` wherever you point it |
 | `npm run figures` | **writes tracked files** | `assets/figures/*.png`, `output/frames/` |
 | `npm run build` | **writes a tracked file** | `ANT-1.html` |
