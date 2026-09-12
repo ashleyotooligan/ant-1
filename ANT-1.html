@@ -53,7 +53,30 @@ const INPUT_NAMES = ['Odour · left', 'Odour · right', 'Odour gradient', 'Obsta
 const ACTION_NAMES = ['Hard left', 'Left', 'Forward', 'Right', 'Hard right'];
 const TURNS = [-0.43, -0.13, 0, 0.13, 0.43];
 
-return {VERSION,DEFAULTS,INPUT_NAMES,ACTION_NAMES,TURNS};
+/* Architecture dimensions.
+ *
+ * These were previously written as bare numbers in controller.js (32, 12, 5,
+ * 45), in metrics.js (24*14) and in simulation.js (40, 23, 13). Nothing tied
+ * them to the names above, and dot() iterates its left operand, so a mismatch
+ * does not throw - it silently drops terms. Adding one sensor channel produced
+ * a controller that ran, learned and reported plausible numbers while ignoring
+ * the new input in the reservoir and dropping the bias feature from the
+ * readout. Deriving the dimensions here makes that impossible to get wrong.
+ */
+const INPUTS = INPUT_NAMES.length;          // 12 sensory channels
+const ACTIONS = ACTION_NAMES.length;        // 5 motor actions
+const RESERVOIR = 32;                       // recurrent units
+const LESION_UNITS = 8;                     // units 00-07, clamped by the lesion intervention
+const FEATURES = RESERVOIR + INPUTS + 1;    // readout input: state, sensors, bias
+
+/* Arena geometry and the coverage grid derived from it. */
+const ARENA = Object.freeze({ width: 960, height: 540 });
+const GRID_CELL = 40;
+const GRID_COLS = Math.ceil(ARENA.width / GRID_CELL);   // 24
+const GRID_ROWS = Math.ceil(ARENA.height / GRID_CELL);  // 14
+const GRID_CELLS = GRID_COLS * GRID_ROWS;               // 336
+
+return {VERSION,DEFAULTS,INPUT_NAMES,ACTION_NAMES,TURNS,INPUTS,ACTIONS,RESERVOIR,LESION_UNITS,FEATURES,ARENA,GRID_CELL,GRID_COLS,GRID_ROWS,GRID_CELLS};
 })();
 __modules["src/core/math.js"]=(()=>{
 const clamp = (v, lo = -1, hi = 1) => Math.max(lo, Math.min(hi, v));
@@ -61,19 +84,29 @@ const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 const angle = v => Math.atan2(Math.sin(v), Math.cos(v));
 const dot = (a, b) => a.reduce((sum, v, i) => sum + v * b[i], 0);
 const mean = values => values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+// min/max are folded rather than spread: Math.min(...values) throws
+// RangeError past roughly 125k elements, and on an empty array it returns
+// Infinity, which JSON.stringify writes as null. An empty summary now says
+// null outright instead of serialising to it by accident.
 function summary(values) {
   const m = mean(values);
   const sd = values.length > 1 ? Math.sqrt(values.reduce((s, x) => s + (x - m) ** 2, 0) / (values.length - 1)) : 0;
-  return { n: values.length, mean: m, sd, min: Math.min(...values), max: Math.max(...values) };
+  let min = null, max = null;
+  for (const v of values) {
+    if (min === null || v < min) min = v;
+    if (max === null || v > max) max = v;
+  }
+  return { n: values.length, mean: m, sd, min, max };
 }
 
 return {clamp,distance,angle,dot,mean,summary};
 })();
 __modules["src/core/arena.js"]=(()=>{
 const { distance }=__modules["src/core/math.js"];
+const { ARENA }=__modules["src/core/config.js"];
 class Arena {
   constructor() {
-    this.width = 960; this.height = 540;
+    this.width = ARENA.width; this.height = ARENA.height;
     this.nest = { x: 154, y: 300, radius: 27 };
     this.food = { x: 781, y: 159, radius: 22 };
     this.obstacles = [{ x: 380, y: 202, radius: 53 }, { x: 568, y: 365, radius: 66 }, { x: 676, y: 84, radius: 27 }];
@@ -111,27 +144,30 @@ return {Random};
 __modules["src/core/controller.js"]=(()=>{
 const { Random }=__modules["src/core/random.js"];
 const { clamp, dot }=__modules["src/core/math.js"];
-const { TURNS }=__modules["src/core/config.js"];
+const { TURNS, INPUTS, ACTIONS, RESERVOIR, FEATURES, LESION_UNITS }=__modules["src/core/config.js"];
 
 /** Fixed leaky reservoir + plastic action-value readout + explicit steering prior.
  * A compact synthetic model; no measured ant connectome or biological neurons.
+ *
+ * Dimensions come from config.js. See the note there: a mismatch between the
+ * sensor vector and these arrays does not raise, it silently drops terms.
  */
 class NeuralController {
   constructor(options) {
     this.options = options; this.rng = new Random(options.seed ^ 0x91ab);
-    this.size = 32; this.state = Array(32).fill(0);
-    this.inputWeights = Array.from({length:32}, () => Array.from({length:12}, () => this.rng.between(-0.65, 0.65)));
-    this.recurrentWeights = Array.from({length:32}, () => Array.from({length:32}, () => this.rng.next() < 0.22 ? this.rng.between(-0.19, 0.19) : 0));
-    this.readout = Array.from({length:5}, () => Array(45).fill(0));
+    this.size = RESERVOIR; this.state = Array(RESERVOIR).fill(0);
+    this.inputWeights = Array.from({length:RESERVOIR}, () => Array.from({length:INPUTS}, () => this.rng.between(-0.65, 0.65)));
+    this.recurrentWeights = Array.from({length:RESERVOIR}, () => Array.from({length:RESERVOIR}, () => this.rng.next() < 0.22 ? this.rng.between(-0.19, 0.19) : 0));
+    this.readout = Array.from({length:ACTIONS}, () => Array(FEATURES).fill(0));
     this.updates = 0; this.lastTD = 0; this.lesion = false;
-    this.last = {inputs: Array(12).fill(0), q: Array(5).fill(0), action:2, features:Array(45).fill(0)};
+    this.last = {inputs: Array(INPUTS).fill(0), q: Array(ACTIONS).fill(0), action:2, features:Array(FEATURES).fill(0)};
   }
   project(inputs) {
-    return this.inputWeights.map((row, i) => this.lesion && i < 8 ? 0 :
+    return this.inputWeights.map((row, i) => this.lesion && i < LESION_UNITS ? 0 :
       0.65 * (this.options.recurrent ? this.state[i] : 0) + 0.35 * Math.tanh(dot(row, inputs) + (this.options.recurrent ? dot(this.recurrentWeights[i], this.state) : 0)));
   }
   prior(inputs) {
-    if (!this.options.prior) return Array(5).fill(0);
+    if (!this.options.prior) return Array(ACTIONS).fill(0);
     let turn = inputs[8] ? inputs[7] * 2.8 : inputs[2] * 0.55 + inputs[6] * 0.25;
     turn += (inputs[3] - inputs[5]) * 1.2;
     if (inputs[4] > 0.15) turn += (inputs[3] > inputs[5] ? 1 : -1) * inputs[4] * 0.8;
@@ -145,7 +181,7 @@ class NeuralController {
   decide(inputs) {
     this.state = this.project(inputs);
     const {features,q} = this.values(inputs,this.state);
-    const action = this.rng.next() < this.options.epsilon ? this.rng.int(5) : q.indexOf(Math.max(...q));
+    const action = this.rng.next() < this.options.epsilon ? this.rng.int(ACTIONS) : q.indexOf(Math.max(...q));
     this.last = {inputs:[...inputs],features,q,action};
     return action;
   }
@@ -155,7 +191,7 @@ class NeuralController {
     const {action,features,q} = this.last;
     const delta = clamp(reward + (terminal ? 0 : this.options.discount * Math.max(...next.q)) - q[action], -2, 2);
     const norm = 1 + dot(features,features);
-    for (let i=0;i<45;i++) this.readout[action][i] = clamp(this.readout[action][i] + this.options.learningRate * delta * features[i] / norm, -0.35, 0.35);
+    for (let i=0;i<FEATURES;i++) this.readout[action][i] = clamp(this.readout[action][i] + this.options.learningRate * delta * features[i] / norm, -0.35, 0.35);
     this.lastTD = delta; this.updates++;
   }
   eraseMemory() { this.state.fill(0); this.readout.forEach(row => row.fill(0)); this.updates=0; this.lastTD=0; }
@@ -186,18 +222,19 @@ return {sense};
 })();
 __modules["src/core/metrics.js"]=(()=>{
 const { mean }=__modules["src/core/math.js"];
+const { GRID_CELLS }=__modules["src/core/config.js"];
 function measure(sim) {
   return {seed:sim.options.seed, ticks:sim.tick, seconds:sim.tick*sim.options.dt, pickups:sim.ant.pickups,
     returns:sim.ant.returns, firstPickupTick:sim.ant.firstPickupTick, pathLength:sim.ant.pathLength,
     collisions:sim.ant.collisions, reward:sim.ant.totalReward, neuralActivity:mean(sim.controller.state.map(Math.abs)),
     weightNorm:sim.controller.weightNorm(), learningUpdates:sim.controller.updates,
-    coverage:sim.visited.size/(24*14)};
+    coverage:sim.visited.size/GRID_CELLS};
 }
 
 return {measure};
 })();
 __modules["src/core/simulation.js"]=(()=>{
-const { DEFAULTS, VERSION, TURNS, ACTION_NAMES }=__modules["src/core/config.js"];
+const { DEFAULTS, VERSION, TURNS, ACTION_NAMES, GRID_CELL, GRID_COLS, GRID_ROWS }=__modules["src/core/config.js"];
 const { Arena }=__modules["src/core/arena.js"];
 const { NeuralController }=__modules["src/core/controller.js"];
 const { Random }=__modules["src/core/random.js"];
@@ -238,7 +275,7 @@ class Simulation {
       a.lastReward=reward;a.totalReward+=reward;
       const nextInputs=sense(a,this.arena,this.options,this.disabled);
       this.controller.learn(reward,nextInputs,reached);
-      this.visited.add(`${Math.min(23,Math.floor(a.x/40))},${Math.min(13,Math.floor(a.y/40))}`);
+      this.visited.add(`${Math.min(GRID_COLS-1,Math.floor(a.x/GRID_CELL))},${Math.min(GRID_ROWS-1,Math.floor(a.y/GRID_CELL))}`);
       this.trail.push({x:a.x,y:a.y,carrying:a.carrying,tick:this.tick});
       if(this.trail.length>2500)this.trail.shift();
       if(this.tick%4===0){this.activity.push([...this.controller.state]);if(this.activity.length>140)this.activity.shift();}

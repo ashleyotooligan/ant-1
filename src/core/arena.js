@@ -1,7 +1,8 @@
 import { distance } from './math.js';
+import { ARENA } from './config.js';
 export class Arena {
   constructor() {
-    this.width = 960; this.height = 540;
+    this.width = ARENA.width; this.height = ARENA.height;
     this.nest = { x: 154, y: 300, radius: 27 };
     this.food = { x: 781, y: 159, radius: 22 };
     this.obstacles = [{ x: 380, y: 202, radius: 53 }, { x: 568, y: 365, radius: 66 }, { x: 676, y: 84, radius: 27 }];

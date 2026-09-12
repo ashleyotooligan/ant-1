@@ -3,8 +3,17 @@ export const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 export const angle = v => Math.atan2(Math.sin(v), Math.cos(v));
 export const dot = (a, b) => a.reduce((sum, v, i) => sum + v * b[i], 0);
 export const mean = values => values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+// min/max are folded rather than spread: Math.min(...values) throws
+// RangeError past roughly 125k elements, and on an empty array it returns
+// Infinity, which JSON.stringify writes as null. An empty summary now says
+// null outright instead of serialising to it by accident.
 export function summary(values) {
   const m = mean(values);
   const sd = values.length > 1 ? Math.sqrt(values.reduce((s, x) => s + (x - m) ** 2, 0) / (values.length - 1)) : 0;
-  return { n: values.length, mean: m, sd, min: Math.min(...values), max: Math.max(...values) };
+  let min = null, max = null;
+  for (const v of values) {
+    if (min === null || v < min) min = v;
+    if (max === null || v > max) max = v;
+  }
+  return { n: values.length, mean: m, sd, min, max };
 }
