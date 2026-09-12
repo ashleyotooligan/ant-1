@@ -1,0 +1,6 @@
+{
+  "description": "Reference values for programmatic runMarket options. The CLI does not load this file automatically.",
+  "seed": 17,
+  "policy": "neural",
+  "broker": {"cash": 100, "fee": 0.001, "slippage": 0.0005, "maxAllocation": 0.8}
+}

@@ -1,0 +1,12 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {PaperBroker} from '../extensions/market/broker.js';
+import {syntheticMarket} from '../extensions/market/fixtures.js';
+import {runMarket,validateBars} from '../extensions/market/replay.js';
+import {encodeMarket} from '../extensions/market/encoder.js';
+test('a flat-price round trip loses only explicit fees and adverse slippage',()=>{const b=new PaperBroker();b.execute('buy',100,'t1');assert.ok(b.cash>=0);assert.ok(b.quantity*100/b.equity(100)<=0.8+1e-9);b.execute('sell',100,'t2');assert.equal(b.quantity,0);const qty=80/(1.001*100.05),expected=20+qty*99.95*(1-.001);assert.ok(Math.abs(b.cash-expected)<1e-10);assert.ok(b.cash<100);});
+test('execution never uses a price before its observed signal',()=>{const bars=syntheticMarket(73,40),r=runMarket(bars,{policy:'buy-and-hold'});assert.equal(r.ledger[0].timestamp,bars[1].timestamp);assert.equal(r.ledger[0].price,bars[1].close*1.0005);});
+test('changing future prices cannot change earlier neural decisions or fills',()=>{const a=syntheticMarket(73,100),b=structuredClone(a);for(let i=60;i<b.length;i++)b[i].close*=2;const ra=runMarket(a),rb=runMarket(b);assert.deepEqual(ra.curve.slice(0,60),rb.curve.slice(0,60));assert.deepEqual(ra.ledger.filter(r=>r.timestamp<a[60].timestamp),rb.ledger.filter(r=>r.timestamp<a[60].timestamp));});
+test('encoder uses only the visible price prefix',()=>{const bars=syntheticMarket(8,50),b=new PaperBroker();assert.deepEqual(encodeMarket(bars,20,b),encodeMarket(bars.slice(0,21),20,b));});
+test('invalid prices, timestamps and broker parameters are rejected',()=>{assert.throws(()=>new PaperBroker({fee:-1}));assert.throws(()=>new PaperBroker({cash:NaN}));assert.throws(()=>validateBars([{timestamp:'bad',close:3}]));const bars=syntheticMarket(3,5);bars[3].timestamp=bars[2].timestamp;assert.throws(()=>validateBars(bars));assert.throws(()=>new PaperBroker().execute('buy',-1,'t'));});
+test('paper accounting remains finite, solvent and reproducible',()=>{const bars=syntheticMarket(73,300),a=runMarket(bars),b=runMarket(bars);assert.deepEqual(a,b);assert.ok(a.finalEquity>0);assert.ok(a.ledger.every(t=>t.cash>=-1e-10));assert.ok(a.curve.every(p=>Number.isFinite(p.equity)));assert.ok(a.maxDrawdown>=0&&a.maxDrawdown<=1);});

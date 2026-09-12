@@ -1,0 +1,10 @@
+import {PROTOCOLS} from '../experiments/protocols.js';
+import {runProtocol} from '../experiments/runner.js';
+import {summary} from '../src/core/math.js';
+import {VERSION} from '../src/core/config.js';
+import {flags,writeJSON} from './io.mjs';
+const args=flags(),seeds=args.seeds?args.seeds.split(',').map(Number):[3,7,11,17,23,31,43,59,71,89,101,131];
+if(!seeds.length||seeds.some(n=>!Number.isInteger(n)||n<0||n>4294967295))throw new Error('Seeds must be unsigned 32-bit integers.');
+const conditions=PROTOCOLS.map(p=>{const runs=seeds.map(s=>runProtocol(p.id,s).metrics);return {id:p.id,runs,returns:summary(runs.map(r=>r.returns)),collisions:summary(runs.map(r=>r.collisions)),reward:summary(runs.map(r=>r.reward)),pathLength:summary(runs.map(r=>r.pathLength))};});
+const out=args.out||'output/benchmark.json';await writeJSON(out,{schema:'ant1.benchmark.v1',version:VERSION,seeds,ticks:2400,interpretation:'Descriptive matched-seed toy-model comparison; no generalisation or biological claim.',conditions});
+console.table(conditions.map(c=>({condition:c.id,returns:c.returns.mean.toFixed(2),sd:c.returns.sd.toFixed(2),collisions:c.collisions.mean.toFixed(1),reward:c.reward.mean.toFixed(2)})));console.log(`Saved ${out}`);
