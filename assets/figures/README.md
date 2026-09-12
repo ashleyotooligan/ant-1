@@ -1,4 +1,4 @@
-# Figure provenance
+# Figure provenance.
 
 The PNGs and GIF in this folder are **direct-rendered experiment figures**. They are not screenshots of a web browser. Browser security prevented local app preview capture during preparation of this release, so no browser-verified screenshot is claimed.
 
